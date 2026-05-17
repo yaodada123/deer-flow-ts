@@ -122,10 +122,15 @@
         "title": "深度思考模式：{status}",
         "description": "启用后，ScholarFlow 将使用推理模型（{model}）生成更深入的研究计划。"
       },
+      "researchMode": "研究模式",
+      "researchModeTooltip": {
+        "title": "研究模式：{status}",
+        "description": "开启后，ScholarFlow 会制定研究计划、检索证据并生成结构化报告。关闭时，将按普通对话方式回答。"
+      },
       "investigation": "调研",
       "investigationTooltip": {
         "title": "调研模式：{status}",
-        "description": "启用后，ScholarFlow 会在规划前进行快速背景检索，适合需要近期背景信息的学术主题。"
+        "description": "仅在研究模式中生效。启用后，ScholarFlow 会在规划前进行快速背景检索，适合需要近期背景信息的学术主题。"
       },
       "enhancePrompt": "用 AI 增强提示",
       "uploadResource": "上传资料",

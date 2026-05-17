@@ -122,10 +122,15 @@
         "title": "Deep Thinking Mode: {status}",
         "description": "When enabled, ScholarFlow will use reasoning model ({model}) to generate more thoughtful research plans."
       },
+      "researchMode": "Research Mode",
+      "researchModeTooltip": {
+        "title": "Research Mode: {status}",
+        "description": "When enabled, ScholarFlow will create a research plan, retrieve evidence, and generate a structured report. When disabled, it responds as a normal chat assistant."
+      },
       "investigation": "Investigation",
       "investigationTooltip": {
         "title": "Investigation Mode: {status}",
-        "description": "When enabled, ScholarFlow will perform a quick background search before planning. This is useful for academic topics that need recent context."
+        "description": "Only applies in Research Mode. When enabled, ScholarFlow will perform a quick background search before planning. This is useful for academic topics that need recent context."
       },
       "enhancePrompt": "Enhance prompt with AI",
       "uploadResource": "Upload material",

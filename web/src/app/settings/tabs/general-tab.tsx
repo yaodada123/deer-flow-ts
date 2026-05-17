@@ -59,6 +59,7 @@ const generalFormSchema = z.object({
     message: "Max search results must be at least 1.",
   }),
   // Others
+  workflowMode: z.enum(["chat", "research"]),
   enableBackgroundInvestigation: z.boolean(),
   enableDeepThinking: z.boolean(),
   enableWebSearch: z.boolean(),

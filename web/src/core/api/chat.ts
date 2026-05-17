@@ -43,6 +43,7 @@ export async function* chatStream(
   params: {
     thread_id: string;
     resources?: Array<Resource>;
+    workflow_mode?: "chat" | "research";
     auto_accepted_plan: boolean;
     enable_clarification?: boolean;
     max_clarification_rounds?: number;

@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS: SettingsState = {
     enableClarification: false,
     maxClarificationRounds: 3,
     enableDeepThinking: false,
+    workflowMode: "chat",
     enableBackgroundInvestigation: false,
     enableWebSearch: true,
     maxPlanIterations: 1,
@@ -37,6 +38,7 @@ export type SettingsState = {
     enableClarification: boolean;
     maxClarificationRounds: number;
     enableDeepThinking: boolean;
+    workflowMode: "chat" | "research";
     enableBackgroundInvestigation: boolean;
     enableWebSearch: boolean;
     maxPlanIterations: number;
@@ -163,6 +165,16 @@ export function setEnableDeepThinking(value: boolean) {
     general: {
       ...state.general,
       enableDeepThinking: value,
+    },
+  }));
+  saveSettings();
+}
+
+export function setWorkflowMode(value: "chat" | "research") {
+  useSettingsStore.setState((state) => ({
+    general: {
+      ...state.general,
+      workflowMode: value,
     },
   }));
   saveSettings();

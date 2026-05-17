@@ -5,7 +5,7 @@ import { Annotation, END, START, StateGraph, type LangGraphRunnableConfig } from
 import type { ChatRequest, SkillId } from "../schemas.js";
 import type { LlmConfig } from "../llm/env-models.js";
 import { loadLlmConfig } from "../llm/env-models.js";
-import { OpenAICompatibleClient } from "../llm/openai-compatible.js";
+import { OpenAICompatibleClient, type OpenAIChatMessage } from "../llm/openai-compatible.js";
 import { formatSkillPromptBlock } from "../skills/prompt.js";
 import { getSkills } from "../skills/registry.js";
 import { selectSkills } from "../skills/selector.js";
@@ -69,6 +69,38 @@ function normalizeUserContent(request: ChatRequest): string {
   if (!lastUser) return "";
   if (typeof lastUser.content === "string") return lastUser.content;
   return lastUser.content.map((c) => c.text ?? "").join("");
+}
+
+function normalizeChatMessageContent(content: ChatRequest["messages"][number]["content"]): string {
+  if (typeof content === "string") return content;
+  return content.map((c) => c.text ?? "").join("");
+}
+
+function normalizeChatMessages(request: ChatRequest): OpenAIChatMessage[] {
+  return request.messages
+    .filter((m) => m.role === "user" || m.role === "assistant")
+    .map((m) => ({
+      role: m.role as "user" | "assistant",
+      content: normalizeChatMessageContent(m.content),
+    }))
+    .filter((m) => m.content.trim().length > 0);
+}
+
+function plainChatFallback(locale: string): string {
+  if (isChineseLocale(locale)) {
+    return "我可以进行普通对话，但当前未配置模型。请配置 BASIC_MODEL__MODEL 和 BASIC_MODEL__API_KEY 后再试。";
+  }
+  return "I can chat normally, but no model is configured. Please set BASIC_MODEL__MODEL and BASIC_MODEL__API_KEY, then try again.";
+}
+
+function plainChatSystemPrompt(locale: string): string {
+  return [
+    "You are ScholarFlow in normal chat mode.",
+    "Answer the user's message conversationally and helpfully.",
+    "Do not create a research plan, do not run academic research workflow, and do not promise evidence retrieval or a full research report.",
+    "If the user asks for a research report, literature review, source-grounded investigation, or evidence retrieval, explain that they can enable Research Mode to run the full workflow, while still providing a concise direct answer if possible.",
+    `Respond in the user's language. Locale: ${locale}.`,
+  ].join(" ");
 }
 
 function resolveActiveSkills(params: {
@@ -316,6 +348,110 @@ async function tracedNode<TResult>(
   }
 }
 
+async function* runPlainChatResponse(params: {
+  request: ChatRequest;
+  llm: OpenAICompatibleClient | null;
+  incomingText: string;
+  signal?: AbortSignal;
+  trace?: TraceRecorder;
+}): AsyncIterable<ChatEvent> {
+  const { request, llm, incomingText, signal, trace } = params;
+  const spanId = `span_plain_chat_${randomUUID()}`;
+  const id = newMessageId();
+
+  const emit = (data: Record<string, unknown>): ChatEvent => {
+    trace?.message({
+      spanId,
+      agent: "coordinator",
+      metadata: {
+        id: data.id,
+        role: data.role,
+        finish_reason: data.finish_reason,
+        ...contentPreview(data.content),
+      },
+    });
+    return { type: "message_chunk", data };
+  };
+
+  trace?.spanStarted({
+    spanId,
+    name: "chat.plain_response",
+    agent: "coordinator",
+    input: { resources: request.resources.length },
+  });
+
+  try {
+    if (!llm) {
+      yield emit({
+        thread_id: request.thread_id,
+        id,
+        agent: "coordinator",
+        role: "assistant",
+        content: plainChatFallback(request.locale),
+      });
+      yield emit({
+        thread_id: request.thread_id,
+        id,
+        agent: "coordinator",
+        role: "assistant",
+        finish_reason: "stop",
+      });
+      trace?.spanEnded({ spanId, name: "chat.plain_response", agent: "coordinator", status: "ok" });
+      return;
+    }
+
+    const chatMessages = normalizeChatMessages(request);
+    if (chatMessages.length === 0 && incomingText.trim()) {
+      chatMessages.push({ role: "user", content: incomingText });
+    }
+
+    const resourceNotice: OpenAIChatMessage[] = request.resources.length
+      ? [
+          {
+            role: "system",
+            content:
+              "The user attached resources, but normal chat mode does not retrieve or inspect resource contents. If the request depends on those materials, ask the user to enable Research Mode.",
+          },
+        ]
+      : [];
+
+    for await (const delta of llm.streamChatCompletions({
+      messages: [
+        { role: "system", content: plainChatSystemPrompt(request.locale) },
+        ...resourceNotice,
+        ...chatMessages,
+      ],
+      ...(signal ? { signal } : {}),
+    })) {
+      if (delta.content) {
+        const cleaned = stripThinkTags(delta.content);
+        if (cleaned) {
+          yield emit({
+            thread_id: request.thread_id,
+            id,
+            agent: "coordinator",
+            role: "assistant",
+            content: cleaned,
+          });
+        }
+      }
+      if (delta.finishReason) break;
+    }
+
+    yield emit({
+      thread_id: request.thread_id,
+      id,
+      agent: "coordinator",
+      role: "assistant",
+      finish_reason: "stop",
+    });
+    trace?.spanEnded({ spanId, name: "chat.plain_response", agent: "coordinator", status: "ok" });
+  } catch (e) {
+    trace?.spanEnded({ spanId, name: "chat.plain_response", agent: "coordinator", status: "error", error: e });
+    throw e;
+  }
+}
+
 function upsertThreadState(params: {
   store: ThreadStore;
   request: ChatRequest;
@@ -398,6 +534,7 @@ export async function* runChatWorkflow(params: {
     enable_web_search: request.enable_web_search,
     enable_background_investigation: request.enable_background_investigation,
     interrupt_feedback: request.interrupt_feedback,
+    workflow_mode: request.workflow_mode,
     active_skills: skillSelection.activeSkills,
     skill_selection_reason: skillSelection.reason,
   });
@@ -415,6 +552,20 @@ export async function* runChatWorkflow(params: {
   const llm = llmCfg ? new OpenAICompatibleClient(llmCfg) : null;
 
   try {
+  if (request.workflow_mode === "chat" && !isFeedback) {
+    for await (const event of runPlainChatResponse({
+      request,
+      llm,
+      incomingText,
+      ...(signal ? { signal } : {}),
+      ...(trace ? { trace } : {}),
+    })) {
+      yield event;
+    }
+    runEndReason = "plain_chat";
+    return;
+  }
+
   const PlanningState = Annotation.Root({
     threadId: Annotation<string>(),
     locale: Annotation<string>(),

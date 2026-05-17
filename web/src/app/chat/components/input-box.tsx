@@ -17,12 +17,13 @@ import { Tooltip } from "~/components/deer-flow/tooltip";
 import { BorderBeam } from "~/components/magicui/border-beam";
 import { Button } from "~/components/ui/button";
 import { enhancePrompt } from "~/core/api";
-import { resolveServiceURL } from "~/core/api/resolve-service-url";
 import { useConfig } from "~/core/api/hooks";
+import { resolveServiceURL } from "~/core/api/resolve-service-url";
 import type { Option, Resource } from "~/core/messages";
 import {
   setEnableDeepThinking,
   setEnableBackgroundInvestigation,
+  setWorkflowMode,
   useSettingsStore,
 } from "~/core/store";
 import { cn } from "~/lib/utils";
@@ -54,9 +55,11 @@ export function InputBox({
   const enableDeepThinking = useSettingsStore(
     (state) => state.general.enableDeepThinking,
   );
+  const workflowMode = useSettingsStore((state) => state.general.workflowMode);
   const backgroundInvestigation = useSettingsStore(
     (state) => state.general.enableBackgroundInvestigation,
   );
+  const researchModeEnabled = workflowMode === "research";
   const { config, loading } = useConfig();
   const reportStyle = useSettingsStore((state) => state.general.reportStyle);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -280,6 +283,33 @@ export function InputBox({
       )}
       <div className="flex items-center px-4 py-2">
         <div className="flex grow gap-2">
+          <Tooltip
+            className="max-w-60"
+            title={
+              <div>
+                <h3 className="mb-2 font-bold">
+                  {t("researchModeTooltip.title", {
+                    status: researchModeEnabled ? t("on") : t("off"),
+                  })}
+                </h3>
+                <p>{t("researchModeTooltip.description")}</p>
+              </div>
+            }
+          >
+            <Button
+              className={cn(
+                "rounded-2xl",
+                researchModeEnabled && "!border-brand !text-brand",
+              )}
+              variant="outline"
+              onClick={() => {
+                setWorkflowMode(researchModeEnabled ? "chat" : "research");
+              }}
+            >
+              <FileText /> {t("researchMode")}
+            </Button>
+          </Tooltip>
+
           {config?.models?.reasoning && config.models.reasoning.length > 0 && (
             <Tooltip
               className="max-w-60"
@@ -329,9 +359,11 @@ export function InputBox({
             <Button
               className={cn(
                 "rounded-2xl",
-                backgroundInvestigation && "!border-brand !text-brand",
+                backgroundInvestigation && researchModeEnabled && "!border-brand !text-brand",
+                !researchModeEnabled && "opacity-60",
               )}
               variant="outline"
+              disabled={!researchModeEnabled}
               onClick={() =>
                 setEnableBackgroundInvestigation(!backgroundInvestigation)
               }

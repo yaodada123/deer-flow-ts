@@ -43,8 +43,8 @@ export function ResearchActivitiesBlock({
   researchId: string;
 }) {
   const activityIds = useStore((state) =>
-    state.researchActivityIds.get(researchId),
-  )!;
+    state.researchActivityIds.get(researchId) ?? [],
+  );
   const ongoing = useStore((state) => state.ongoingResearchId === researchId);
   
   return (

@@ -111,6 +111,7 @@ export async function sendMessage(
       thread_id: THREAD_ID,
       interrupt_feedback: interruptFeedback,
       resources,
+      workflow_mode: settings.workflowMode ?? "chat",
       auto_accepted_plan: settings.autoAcceptedPlan,
       enable_clarification: settings.enableClarification ?? false,
       max_clarification_rounds: settings.maxClarificationRounds ?? 3,
@@ -247,8 +248,9 @@ function appendMessage(message: Message) {
   ) {
     if (!getOngoingResearchId()) {
       const id = message.id;
-      appendResearch(id);
-      openResearch(id);
+      if (appendResearch(id)) {
+        openResearch(id);
+      }
     }
     appendResearchActivity(message);
   }
@@ -259,7 +261,7 @@ function getOngoingResearchId() {
   return useStore.getState().ongoingResearchId;
 }
 
-function appendResearch(researchId: string) {
+function appendResearch(researchId: string): boolean {
   let planMessage: Message | undefined;
   let userQuery: string | undefined;
   const reversedMessageIds = [...useStore.getState().messageIds].reverse();
@@ -276,7 +278,7 @@ function appendResearch(researchId: string) {
     }
   }
   if (!planMessage) {
-    return;
+    return false;
   }
 
   const messageIds = [planMessage.id, researchId];
@@ -296,13 +298,14 @@ function appendResearch(researchId: string) {
       userQuery ?? "",
     ),
   });
+  return true;
 }
 
 function appendResearchActivity(message: Message) {
   const researchId = getOngoingResearchId();
   if (researchId) {
     const researchActivityIds = useStore.getState().researchActivityIds;
-    const current = researchActivityIds.get(researchId)!;
+    const current = researchActivityIds.get(researchId) ?? [];
     if (!current.includes(message.id)) {
       useStore.setState({
         researchActivityIds: new Map(researchActivityIds).set(researchId, [

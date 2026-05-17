@@ -33,6 +33,7 @@ export const ChatRequestSchema = z.object({
   max_step_num: z.number().int().positive().optional().default(3),
   max_search_results: z.number().int().positive().optional().default(3),
   auto_accepted_plan: z.boolean().optional().default(false),
+  workflow_mode: z.enum(["chat", "research"]).optional().default("chat"),
   interrupt_feedback: z.string().nullable().optional(),
   mcp_settings: z.record(z.string(), z.unknown()).nullable().optional(),
   enable_background_investigation: z.boolean().optional().default(true),
